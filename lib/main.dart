@@ -24,13 +24,16 @@ class MyApp extends StatelessWidget {
       child: BlocProvider(
         create: (context) => MessageBloc(context.read<PromptRepository>()),
         child: MaterialApp(
-          title: 'Flutter Demo',
+          debugShowCheckedModeBanner: false,
+          title: 'Free Doctor',
           theme: ThemeData(
-            colorScheme:
-                ColorScheme.fromSwatch(primarySwatch: Colors.deepPurple),
-            // Note: useMaterial3 is deprecated
-          ),
-          home: const MyHomePage(title: 'Flutter Demo Home Page'),
+              colorScheme:
+                  ColorScheme.fromSwatch(primarySwatch: Colors.deepPurple),
+              appBarTheme: const AppBarTheme(
+                  color: Color.fromRGBO(81, 45, 168, 1),
+                  centerTitle: true,
+                  foregroundColor: Colors.white)),
+          home: const MyHomePage(title: 'YOUR PERSONAL DOCTOR'),
         ),
       ),
     );
@@ -51,7 +54,9 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
   final SpeechToText _speechToText = SpeechToText();
   bool _speechEnabled = false;
+  bool _isTalking = false;
   String _lastWords = '';
+  String _spokenWords = "";
 
   late final List<AnimationController> _animationControllers;
   late final List<Animatable<Offset>> _animations;
@@ -71,7 +76,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   }
 
   void _startListening() async {
-    //_stop();
     await _speechToText.listen(
       onResult: _onSpeechResult,
       listenFor: const Duration(minutes: 1),
@@ -80,7 +84,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   }
 
   void _stopListening() async {
-    //_stop();
     await _speechToText.stop();
     setState(() {});
   }
@@ -93,11 +96,22 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   }
 
   void _speak(String text) async {
-    await _flutterTts.speak(text);
+    if (text != _spokenWords) {
+      await _flutterTts.speak(text);
+      setState(() {
+        _spokenWords = text;
+        _isTalking = true;
+      });
+    }
   }
 
   void _stop() async {
-    await _flutterTts.stop();
+    if (_isTalking) {
+      await _flutterTts.stop();
+      setState(() {
+        _isTalking = false;
+      });
+    }
   }
 
   void _initSetting() async {
@@ -148,7 +162,28 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       ),
       body: Column(
         children: [
-          Text(_lastWords),
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Card(
+              color: Colors.deepPurpleAccent.shade100,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: _speechToText.isListening
+                    ? Text(
+                        "Speak in to the microphone",
+                        style: TextStyle(
+                            color: Colors.deepPurple.shade900, fontSize: 20),
+                      )
+                    : Text(
+                        "Press the microphone the right button to start speaking with the doctor",
+                        style: TextStyle(
+                          color: Colors.deepPurple.shade900,
+                          fontSize: 20,
+                        ),
+                      ),
+              ),
+            ),
+          ),
           Expanded(
             child: Center(
               child: BlocBuilder<MessageBloc, MessageState>(
@@ -164,11 +199,19 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                             return _animationControllers[index]
                                 .drive(animatable);
                           }).toList(),
-                          color: const Color.fromARGB(255, 255, 0, 0));
+                          color: const Color.fromRGBO(83, 109, 254, 1));
                     } else {
-                      return const Text("No messages yet!");
+                      return LoadingWidget(
+                          offsetAnimations:
+                              _animations.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final animatable = entry.value;
+                            return _animationControllers[index]
+                                .drive(animatable);
+                          }).toList(),
+                          color: const Color.fromRGBO(189, 189, 189, 1));
                     }
-                  } else if (state is MessageLoading) {
+                  } else if (state is MessageFailure) {
                     return LoadingWidget(
                         offsetAnimations:
                             _animations.asMap().entries.map((entry) {
@@ -176,33 +219,72 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                           final animatable = entry.value;
                           return _animationControllers[index].drive(animatable);
                         }).toList(),
-                        color: const Color.fromARGB(255, 255, 255, 255));
-                  } else if (state is MessageFailure) {
-                    return Center(child: Text('Error: ${state.error}'));
+                        color: const Color.fromARGB(255, 255, 0, 0));
                   } else {
-                    return const Center(child: Text('No messages yet'));
+                    return LoadingWidget(
+                        offsetAnimations:
+                            _animations.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final animatable = entry.value;
+                          return _animationControllers[index].drive(animatable);
+                        }).toList(),
+                        color: const Color.fromRGBO(189, 189, 189, 1));
                   }
                 },
               ),
             ),
           ),
-          ElevatedButton(
-              onPressed: () => context.read<MessageBloc>().add(MessageClear()),
-              child: const Text("clear context"))
+          SizedBox(
+            height: 90,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FloatingActionButton(
+                  onPressed: () => {
+                    if (_isTalking) {_stop()}
+                  },
+                  tooltip: 'Speaking',
+                  backgroundColor: const Color.fromRGBO(83, 109, 254, 1),
+                  child: Icon(_isTalking ? Icons.stop : Icons.play_arrow),
+                ),
+                ElevatedButton(
+                  onPressed: () =>
+                      context.read<MessageBloc>().add(MessageClear()),
+                  style: const ButtonStyle(
+                      backgroundColor: WidgetStatePropertyAll(
+                          Color.fromRGBO(83, 109, 254, 1)),
+                      foregroundColor: WidgetStatePropertyAll(Colors.white)),
+                  child: const Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: Text(
+                      "Clear Context",
+                      style: TextStyle(fontSize: 20),
+                    ),
+                  ),
+                ),
+                FloatingActionButton(
+                  onPressed: _speechEnabled
+                      ? () {
+                          if (!_speechToText.isListening) {
+                            setState(() {
+                              _isTalking = false;
+                            });
+                            _startListening();
+                          } else {
+                            _stopListening();
+                          }
+                        }
+                      : null,
+                  tooltip: 'Listen',
+                  backgroundColor: const Color.fromRGBO(83, 109, 254, 1),
+                  child: Icon(
+                      _speechToText.isNotListening ? Icons.mic_off : Icons.mic),
+                ),
+              ],
+            ),
+          )
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _speechEnabled
-            ? () {
-                if (!_speechToText.isListening) {
-                  _startListening();
-                } else {
-                  _stopListening();
-                }
-              }
-            : null,
-        tooltip: 'Listen',
-        child: Icon(_speechToText.isNotListening ? Icons.mic_off : Icons.mic),
       ),
     );
   }
